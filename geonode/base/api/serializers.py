@@ -62,7 +62,7 @@ from geonode.base.models import (
 from geonode.documents.models import Document
 from geonode.geoapps.models import GeoApp
 from geonode.groups.models import GroupCategory, GroupProfile
-from geonode.base.api.fields import ComplexDynamicRelationField
+from geonode.base.api.fields import ComplexDynamicRelationField, KeywordsDynamicRelationField
 from geonode.layers.utils import get_download_handlers, get_default_dataset_download_handler
 from geonode.assets.handlers import asset_handler_registry
 from geonode.utils import build_absolute_uri
@@ -615,7 +615,7 @@ class ResourceBaseSerializer(DynamicModelSerializer):
     sourcetype = serializers.CharField(read_only=True)
     embed_url = EmbedUrlField(required=False)
     thumbnail_url = ThumbnailUrlField(read_only=True)
-    keywords = ComplexDynamicRelationField(SimpleHierarchicalKeywordSerializer, many=True)
+    keywords = KeywordsDynamicRelationField(SimpleHierarchicalKeywordSerializer, many=True)
     tkeywords = ComplexDynamicRelationField(SimpleThesaurusKeywordSerializer, many=True)
     regions = DynamicRelationField(SimpleRegionSerializer, embed=True, many=True, read_only=True)
     category = ComplexDynamicRelationField(SimpleTopicCategorySerializer, embed=True)
@@ -749,7 +749,11 @@ class ResourceBaseSerializer(DynamicModelSerializer):
 
     def save(self, **kwargs):
         extent = self.validated_data.pop("extent", None)
+        keywords = self.validated_data.pop("keywords", None)
         instance = super().save(**kwargs)
+        if keywords is not None:
+            instance.keywords.clear()
+            [instance.keywords.add(keyword) for keyword in keywords]
         if extent and instance.get_real_instance()._meta.model in api_bbox_settable_resource_models:
             srid = extent.get("srid", "EPSG:4326")
             coords = extent.get("coords")
