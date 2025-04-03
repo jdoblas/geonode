@@ -22,6 +22,50 @@ import json
 from django.core.exceptions import ValidationError
 from dynamic_rest.fields.fields import DynamicRelationField
 
+from geonode.base.models import (
+    HierarchicalKeyword,
+)
+
+class KeywordsDynamicRelationField(DynamicRelationField):
+    def to_internal_value_single(self, data, serializer):
+        """Overwrite of DynamicRelationField implementation to handle complex data structure initialization
+        Args:
+            data (Union[str, Dict]}): serialized or deserialized data from http calls (POST, GET ...),
+                                      if content-type application/json is used, data shows up as dict
+            serializer (DynamicModelSerializer): Serializer for the given data
+        Raises:
+            ValidationError: raised when requested data does not exist
+            django.db.models.QuerySet: return QuerySet object of the request or set data
+        """
+
+        related_model = serializer.Meta.model
+        try:
+            if isinstance(data, str):
+                data = json.loads(data)
+        except ValueError:
+            return super().to_internal_value_single(data, serializer)
+        if not isinstance(data, dict):
+            return super().to_internal_value_single(data, serializer)
+
+        def __set_full_keyword__(d):
+
+            if "name" not in d:
+                raise ValidationError('No "name" object found for given keyword ...')
+            if "slug" not in d:
+                d["slug"] = d["name"]
+            if "depth" not in d:
+                d["depth"] = 1
+            if "path" not in d:
+                d["path"] = d["name"]
+            return d
+        data = __set_full_keyword__(data)
+        keyword = HierarchicalKeyword.objects.filter(name=data["name"]).first()
+        if keyword is None:
+            keyword = HierarchicalKeyword.objects.create(
+                name=data["name"], slug=data["slug"], depth=data["depth"], path=data["path"]
+            )
+        keyword.save()
+        return keyword
 
 class ComplexDynamicRelationField(DynamicRelationField):
     def to_internal_value_single(self, data, serializer):
